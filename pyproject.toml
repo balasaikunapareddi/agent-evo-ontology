@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-evo-ontology"
+version = "0.1.0"
+description = "A versioned, evolving ontology layer over MCP for text-to-SQL agents: the agent never sees the raw schema, and ontology edits ship only when a paired evaluation beats the parent version."
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "litellm",
+    "mcp==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
