@@ -118,6 +118,35 @@ and the wrong active-customer definition. That is an honest result, and
 it is the result the gate is designed to produce on a dataset this small.
 A bigger validation set would settle those three.
 
+### Live test with real Gemini
+
+`scripts/live_test.py` runs the same loop with a real model
+(`gemini/gemini-3.5-flash-lite`, via LiteLLM), same 16 questions:
+
+| version | overall |
+| --- | --- |
+| no-ontology | 2/16 (12.5%) |
+| initial (v0) | 2/16 (12.5%) |
+| evolved (ontology_v1) | 6/16 (37.5%) |
+
+The gate kept 1 of 7 candidates live (fix best-seller mapping, b=2,
+c=0; newly-won v5/v6 flagged for gold-query review) and rejected 6 —
+including the revenue fix, which improved validation 25% → 38% but only
+won one question (b=1, c=0), below the margin-fallback bar of b − c ≥ 2.
+The full report is in `.runs/live/attempt-4/report.json`.
+
+Two things the live run taught me that the stub could not. First, the
+real model is worse than the stub with no ontology (2/16 vs 3/16): it
+invents columns (`c.customer_name`) and joins that do not exist, and
+those score as wrong — which is also why the agent now catches SQL
+errors instead of crashing on them. Second, the ontology still helps
+the real model (2 → 6), but the initial ontology helped it not at all
+(2 → 2): a small model does not reliably use the layer it is given, and
+only the evolved layer's corrections moved the needle. The live numbers
+are lower across the board than the stub's — that is the gap between a
+rule-based harness and a real model on a 16-question toy set, and it is
+exactly why the stub numbers above are labelled as the stub's.
+
 ## The paper's numbers (theirs, not this repo's)
 
 EvoOntology (Chong et al., arXiv 2609.15779) reports, on the paper's
@@ -152,8 +181,9 @@ query the layer without this repo in the middle.
 - **The stub agent is rule-based.** It builds SQL from ontology lookups
   plus small intent handlers. Without an ontology it has to guess
   literals (`is_vip = 'yes'`, `channel = 'web'`), which is why
-  no-ontology scores 3/16 — a real LLM would do better with no ontology
-  than that. The stub exists to make the three versions differ
+  no-ontology scores 3/16. The live run showed the real model scoring
+  2/16 with no ontology — worse than the stub, because it invents
+  columns and joins. The stub exists to make the three versions differ
   deterministically, not to stand in for a model.
 - **McNemar on 8 validation questions is weak.** With 8 questions the
   discordant count never reaches 10, so the exact test never fires and
