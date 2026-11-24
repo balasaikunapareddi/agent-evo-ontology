@@ -80,14 +80,15 @@ def main() -> int:
         report["versions"]["evolved_version"] = evolved.version
         report["log"] = [entry.model_dump() for entry in log]
     except Exception as exc:  # noqa: BLE001 - report the block honestly
-        from litellm.exceptions import ServiceUnavailableError
+        from litellm.exceptions import RateLimitError, ServiceUnavailableError
 
-        if isinstance(exc, ServiceUnavailableError):
-            print(f"BLOCKED by Gemini 503 (ServiceUnavailableError) during "
-                  f"the live run: {exc}")
+        if isinstance(exc, (ServiceUnavailableError, RateLimitError)):
+            kind = ("503 (ServiceUnavailableError)" if isinstance(
+                exc, ServiceUnavailableError) else "429 (RateLimitError)")
+            print(f"BLOCKED by Gemini {kind} during the live run: {exc}")
             print("Live test did not complete — the model endpoint was "
-                  "unavailable. Retry when Gemini calms down.")
-            report["blocked"] = f"ServiceUnavailableError: {exc}"
+                  "unavailable or rate-limited. Retry when Gemini calms down.")
+            report["blocked"] = f"{type(exc).__name__}: {exc}"
             with open(attempt_dir / "report.json", "w", encoding="utf-8") as f:
                 json.dump(report, f, indent=2)
             return 1

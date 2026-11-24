@@ -8,6 +8,15 @@ from __future__ import annotations
 
 import os
 import re
+import time
+
+# Gemini free tier allows 15 requests/minute. The live loop makes
+# ~150 calls, so the backend paces itself (default 4.5 s between
+# calls, ~13/min) and retries a 429 once the server says to wait.
+# Override with LLM_MIN_INTERVAL_S (seconds, 0 to disable pacing).
+DEFAULT_MIN_INTERVAL_S = 4.5
+RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_WAIT_S = 60.0
 
 OCT_FILTER = "order_date BETWEEN '2026-10-01' AND '2026-10-31'"
 
@@ -176,20 +185,44 @@ class LiteLLMBackend:
     """Real LLM through LiteLLM. Model from LLM_MODEL, default
     gemini/gemini-3.5-flash-lite. Raises the underlying litellm
     error (e.g. ServiceUnavailableError on Gemini 503) so callers
-    can report it honestly instead of hiding it."""
+    can report it honestly instead of hiding it. A 429 rate limit is
+    retried (the free tier is 15 req/min and the live loop makes
+    ~150 calls); calls are also paced to stay under the limit."""
 
     def __init__(self, model: str | None = None):
         self.model = model or os.environ.get(
             "LLM_MODEL", "gemini/gemini-3.5-flash-lite")
+        self._min_interval = float(os.environ.get(
+            "LLM_MIN_INTERVAL_S", DEFAULT_MIN_INTERVAL_S))
+        self._last_call = 0.0
+
+    def _pace(self) -> None:
+        if self._min_interval <= 0:
+            return
+        wait = self._min_interval - (time.monotonic() - self._last_call)
+        if wait > 0:
+            time.sleep(wait)
 
     def generate(self, prompt: str) -> str:
         import litellm  # imported lazily: stub runs never need it
+        from litellm.exceptions import RateLimitError
 
-        response = litellm.completion(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.choices[0].message.content or ""
+        last_error: Exception | None = None
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            self._pace()
+            try:
+                response = litellm.completion(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                self._last_call = time.monotonic()
+                return response.choices[0].message.content or ""
+            except RateLimitError as exc:
+                last_error = exc
+                self._last_call = time.monotonic()
+                if attempt < RATE_LIMIT_RETRIES:
+                    time.sleep(RATE_LIMIT_WAIT_S)
+        raise last_error  # type: ignore[misc]
 
 
 def backend_for_env() -> str:

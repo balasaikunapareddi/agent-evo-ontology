@@ -128,9 +128,14 @@ class EvolutionLoop:
         dev_failures = [q for q in dev if not parent_eval.per_question.get(q.id, False)]
         proposals = diagnose_failures(dev_failures)
 
+        # The parent validation result is computed once per layer
+        # version and reused across proposals — re-evaluating the same
+        # layer would only re-roll the same (non-deterministic) model
+        # and burn rate-limit budget. It is recomputed after a keep,
+        # when the layer actually changes.
+        parent_val = self._agent_for(current).evaluate(validation)
         for proposal in proposals:
             candidate = apply_proposal(current, proposal)
-            parent_val = self._agent_for(current).evaluate(validation)
             cand_val = self._agent_for(candidate).evaluate(validation)
             b = sum(1 for q in validation
                     if not parent_val.per_question.get(q.id, False)
@@ -148,6 +153,9 @@ class EvolutionLoop:
                 version_n += 1
                 candidate.version = f"ontology_v{version_n}"
                 current = candidate
+                # Layer changed: the parent baseline must be re-measured
+                # before the next candidate is judged against it.
+                parent_val = self._agent_for(current).evaluate(validation)
                 # Annotation-error flag: every newly-won validation
                 # question gets its gold SQL printed next to the
                 # agent's SQL for review.
