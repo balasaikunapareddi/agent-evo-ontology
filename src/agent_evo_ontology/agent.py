@@ -11,6 +11,7 @@ schema knowledge it can use is what the ontology tools returned.
 """
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from .llm import LiteLLMBackend, StubBackend, backend_for_env, extract_sql
@@ -104,9 +105,16 @@ class TextToSqlAgent:
         return extract_sql(self._llm.generate(prompt))
 
     def answer(self, question: str) -> tuple[str, list[tuple]]:
-        """Return (sql, rows) for *question*."""
+        """Return (sql, rows) for *question*. A SQL error scores as a
+        wrong answer (empty rows), never a crash — a failed execution
+        is a trajectory outcome, not an exception. A real LLM invents
+        columns (e.g. c.customer_name); that must cost a point, not
+        abort the whole evaluation."""
         sql = self.generate_sql(question)
-        rows = execute_sql(self.db_path, sql)
+        try:
+            rows = execute_sql(self.db_path, sql)
+        except sqlite3.Error:
+            rows = []
         return sql, rows
 
     def evaluate(self, questions: list[Question]) -> EvalResult:

@@ -43,6 +43,23 @@ def test_stub_web_orders_wrong_without_alias(db_path, v0):
     assert "channel = 'web'" in sql
 
 
+def test_bad_sql_scores_wrong_instead_of_crashing(db_path, v0):
+    """Regression: a real LLM invents columns (e.g. c.customer_name);
+    the evaluation must score it wrong, not raise. Found by the live
+    test run, where Gemini's first no-ontology query aborted the run."""
+    agent = _agent(v0, db_path)
+    agent.generate_sql = lambda q: (
+        "SELECT c.customer_name FROM customers c ORDER BY c.id")
+    sql, rows = agent.answer("List our customers.")
+    assert "customer_name" in sql
+    assert rows == []
+    result = agent.evaluate([type("Q", (), {
+        "id": "q-test", "question": "List our customers.",
+        "expected_rows": [["Ada Lovelace"]], "split": "dev",
+    })()])
+    assert result.correct == 0
+
+
 def test_agent_never_gets_raw_schema(db_path, v0):
     agent = _agent(v0, db_path)
     # The agent holds a client and a db path for execution — no schema.
