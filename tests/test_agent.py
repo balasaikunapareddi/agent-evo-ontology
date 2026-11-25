@@ -79,6 +79,14 @@ def test_accuracy_ordering_evolved_ge_initial_ge_no_ontology(db_path, questions,
     assert evo_acc > v0_acc  # the loop actually improves the stub
 
 
+def test_evaluate_records_sql_per_question(db_path, questions):
+    agent = _agent(build_empty_ontology(), db_path)
+    result = agent.evaluate(split_questions(questions, "validation"))
+    assert set(result.sql_by_question) == {
+        q.id for q in split_questions(questions, "validation")}
+    assert result.sql_by_question["v1"].startswith("SELECT SUM(total_cents)")
+
+
 def test_exact_stub_accuracies(db_path, questions, v0):
     dev = split_questions(questions, "dev")
     validation = split_questions(questions, "validation")

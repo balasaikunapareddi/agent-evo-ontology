@@ -73,6 +73,55 @@ def test_annotation_flag_raised_for_newly_won(db_path, questions, v0):
     assert any("gold SQL" in flag for e in kept for flag in e.flags)
 
 
+def test_kept_log_entries_record_the_judged_parent(db_path, questions, v0):
+    """Regression: the log used to record the post-keep layer as the
+    parent (parent_version == candidate_version, "50% -> 50%") because
+    parent_val was re-measured before the entry was appended."""
+    dev = split_questions(questions, "dev")
+    validation = split_questions(questions, "validation")
+    _evolved, log = EvolutionLoop(db_path, backend="stub").run(v0, dev, validation)
+    kept = [e for e in log if e.decision == "keep"]
+    assert [(e.parent_version, e.parent_accuracy,
+             e.candidate_version, e.candidate_accuracy) for e in kept] == [
+        ("ontology_v0", 0.25, "ontology_v1", 0.5),
+        ("ontology_v1", 0.5, "ontology_v2", 0.75),
+        ("ontology_v2", 0.75, "ontology_v3", 1.0),
+    ]
+
+
+def test_annotation_flag_shows_evaluation_time_sql(
+        db_path, questions, v0, monkeypatch):
+    """Regression: the flag used to re-answer after the keep, which
+    re-rolls a live model — the SQL shown could differ from the SQL
+    that actually won. The flag must show the SQL recorded during
+    the candidate evaluation. The counting stub returns the real SQL
+    for the first three calls per question, then 'SELECT 1': a flag
+    re-answer (a 4th+ call) would show 'SELECT 1' under the old code.
+    """
+    from agent_evo_ontology.llm import StubBackend
+
+    original = StubBackend.sql_for
+    calls: dict[str, int] = {}
+
+    @staticmethod
+    def counting_sql_for(intent, question, lookups, relationships):
+        n = calls.get(question, 0) + 1
+        calls[question] = n
+        if n > 3:
+            return "SELECT 1"
+        return original(intent, question, lookups, relationships)
+
+    monkeypatch.setattr(StubBackend, "sql_for", counting_sql_for)
+    dev = split_questions(questions, "dev")
+    validation = split_questions(questions, "validation")
+    _evolved, log = EvolutionLoop(db_path, backend="stub").run(v0, dev, validation)
+    kept = [e for e in log if e.decision == "keep"]
+    assert kept, "revenue fix should still be kept under the counting stub"
+    flag = next(f for e in kept for f in e.flags if f.startswith("v1:"))
+    assert "SELECT 1" not in flag
+    assert "SUM(o.total_cents)/100.0" in flag
+
+
 def test_save_run_log_writes_json(tmp_path, db_path, questions, v0):
     dev = split_questions(questions, "dev")
     validation = split_questions(questions, "validation")

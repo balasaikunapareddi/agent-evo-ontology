@@ -82,6 +82,10 @@ class EvalResult(BaseModel):
     correct: int
     total: int
     per_question: dict[str, bool] = Field(default_factory=dict)
+    # The SQL the agent actually generated per question — recorded
+    # at evaluation time, so the annotation-error flag can show the
+    # SQL that won a question instead of re-rolling a live model.
+    sql_by_question: dict[str, str] = Field(default_factory=dict)
 
 
 class EvolutionLogEntry(BaseModel):

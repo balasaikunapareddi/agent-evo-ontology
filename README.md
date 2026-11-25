@@ -194,6 +194,12 @@ query the layer without this repo in the middle.
   and a ≥ 5.7-point DDR-Bench drop when a layer is reused across
   backbones. The layer here was evolved under the stub; do not assume it
   would help a different model the same way.
+- **The live parent baseline is a single re-rolled sample.** After a
+  keep, the parent is re-measured with a fresh model sample, and the
+  two samples can disagree: live, the best-seller layer scored 0.5 as
+  the candidate and 0.375 when re-measured as the new parent. The gate
+  compares one candidate sample against one parent sample, so a live
+  keep/reject is noisier than the stub's deterministic verdicts.
 - **Gold is verified by construction here.** The annotation-error flag is
   precautionary in this repo. On a real dataset it would be load-bearing.
 
@@ -216,7 +222,7 @@ python3 -m venv .venv
 .venv/bin/pip install -e .
 .venv/bin/python -m agent_evo_ontology demo     # no API key needed
 .venv/bin/python -m agent_evo_ontology evolve   # same run, gate log
-.venv/bin/python -m pytest tests/ -q            # 58 tests, stub only
+.venv/bin/python -m pytest tests/ -q            # 71 tests, stub only
 .venv/bin/python -m agent_evo_ontology.mcp_server  # stdio MCP server
 ```
 
@@ -248,7 +254,7 @@ data/
   seed_docs.md    the loose business notes v0 was built from
   questions.json  16 questions with verified gold SQL
 scripts/live_test.py
-tests/            58 tests, deterministic stub, no API key
+tests/            71 tests, deterministic stub, no API key
 ```
 
 ## Citations

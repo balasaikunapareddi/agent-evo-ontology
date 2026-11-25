@@ -186,9 +186,49 @@ def build_db(path: str | Path) -> Path:
     return path
 
 
+_READ_ONLY_FIRST_WORDS = ("select", "with")
+
+
+def _check_read_only(sql: str) -> None:
+    """Reject anything that is not a single read-only statement.
+
+    A model-generated DROP/DELETE/INSERT would otherwise execute
+    against the shared dataset and corrupt every later question in
+    the run (verified: ``DROP TABLE orders`` succeeded through this
+    function before this guard). Leading ``--``/``/* */`` comments
+    are skipped so a model cannot smuggle a write past the check.
+    Raises sqlite3.OperationalError, which the agent scores as a
+    wrong answer instead of crashing.
+    """
+    text = sql.strip()
+    while True:
+        if text.startswith("--"):
+            _, _, text = text.partition("\n")
+            text = text.strip()
+        elif text.startswith("/*"):
+            end = text.find("*/")
+            if end == -1:
+                break
+            text = text[end + 2:].strip()
+        else:
+            break
+    first = text.split(None, 1)[0].lower().lstrip("(") if text.split(None, 1) else ""
+    if first not in _READ_ONLY_FIRST_WORDS:
+        raise sqlite3.OperationalError(
+            f"only SELECT/WITH statements are allowed, got: {first or 'empty'}")
+
+
 def execute_sql(db_path: str | Path, sql: str) -> list[tuple]:
-    """Run *sql* against the SQLite DB and return rows as tuples."""
-    conn = sqlite3.connect(str(db_path))
+    """Run a read-only *sql* (SELECT/WITH) against the SQLite DB and
+    return rows as tuples.
+
+    The database is opened read-only (``mode=ro``) so that even a
+    statement that passes the keyword check cannot mutate the
+    dataset — a second layer of defence behind _check_read_only.
+    """
+    _check_read_only(sql)
+    uri = Path(db_path).resolve().as_uri() + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
     try:
         return [tuple(row) for row in conn.execute(sql)]
     finally:

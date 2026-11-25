@@ -120,9 +120,11 @@ class TextToSqlAgent:
     def evaluate(self, questions: list[Question]) -> EvalResult:
         """Execution accuracy (BIRD-style EX) over *questions*."""
         per_question: dict[str, bool] = {}
+        sql_by_question: dict[str, str] = {}
         correct = 0
         for q in questions:
             _sql, rows = self.answer(q.question)
+            sql_by_question[q.id] = _sql
             ok = rows_match(rows, [tuple(r) for r in q.expected_rows])
             per_question[q.id] = ok
             correct += int(ok)
@@ -134,4 +136,5 @@ class TextToSqlAgent:
             correct=correct,
             total=total,
             per_question=per_question,
+            sql_by_question=sql_by_question,
         )

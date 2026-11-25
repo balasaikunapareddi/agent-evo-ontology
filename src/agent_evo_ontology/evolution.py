@@ -145,6 +145,13 @@ class EvolutionLoop:
                     and not cand_val.per_question.get(q.id, False))
             decision, reason, p = decide_gate(
                 b, c, parent_val.accuracy, cand_val.accuracy)
+            # Snapshot the parent the gate actually judged. Below, a
+            # keep re-measures parent_val against the NEW layer, so
+            # these must be recorded before that reassignment —
+            # otherwise the log claims parent and candidate were the
+            # same version at the same accuracy (e.g. "50% -> 50%").
+            log_parent_version = current.version
+            log_parent_accuracy = parent_val.accuracy
             newly_won = [q.id for q in validation
                          if not parent_val.per_question.get(q.id, False)
                          and cand_val.per_question.get(q.id, False)]
@@ -158,19 +165,23 @@ class EvolutionLoop:
                 parent_val = self._agent_for(current).evaluate(validation)
                 # Annotation-error flag: every newly-won validation
                 # question gets its gold SQL printed next to the
-                # agent's SQL for review.
+                # agent's SQL for review. The agent SQL is the one
+                # recorded during the candidate evaluation itself —
+                # re-answering here would re-roll a live model and
+                # could show a different (possibly wrong) SQL next to
+                # a question the candidate actually won.
                 for q in validation:
                     if q.id in newly_won:
-                        agent_sql, _ = self._agent_for(current).answer(q.question)
+                        agent_sql = cand_val.sql_by_question.get(q.id, "")
                         flags.append(
                             f"{q.id}: agent SQL: {agent_sql} | "
                             f"gold SQL: {q.gold_sql} | {REVIEW_NOTE}")
             log.append(EvolutionLogEntry(
                 proposal_id=proposal.id,
                 description=proposal.description,
-                parent_version=parent_val.version,
+                parent_version=log_parent_version,
                 candidate_version=candidate.version,
-                parent_accuracy=parent_val.accuracy,
+                parent_accuracy=log_parent_accuracy,
                 candidate_accuracy=cand_val.accuracy,
                 b=b, c=c, p_value=p,
                 decision=decision, reason=reason,
