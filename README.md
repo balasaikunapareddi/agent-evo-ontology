@@ -147,6 +147,27 @@ are lower across the board than the stub's — that is the gap between a
 rule-based harness and a real model on a 16-question toy set, and it is
 exactly why the stub numbers above are labelled as the stub's.
 
+### Live test with gpt-4o-mini
+
+The same loop was re-run with a second real model
+(`openai/gpt-4o-mini`, via LiteLLM), same 16 questions, on the
+post-review code:
+
+| version | overall |
+| --- | --- |
+| no-ontology | 1/16 (6.2%) |
+| initial (v0) | 3/16 (18.8%) |
+| evolved (ontology_v1) | 5/16 (31.2%) |
+
+The gate again kept 1 of 7 candidates — but a different one. On Gemini
+the revenue fix was rejected (b=1, below the bar); on gpt-4o-mini it
+was the keeper (validation 12% → 38%, b=2, c=0), while the best-seller
+fix Gemini kept was rejected here (b − c = 1). Same ontology, same
+questions, different model, different evolution — which is the paper's
+"ontologies don't travel" finding showing up in a 16-question toy: each
+model's layer really does evolve toward itself. The full report is in
+`.runs/live/attempt-6/report.json`.
+
 ## The paper's numbers (theirs, not this repo's)
 
 EvoOntology (Chong et al., arXiv 2609.15779) reports, on the paper's
